@@ -8,3 +8,4 @@
 
 - name: configure upstream repo
   apt_repository: repo='deb https://apt.dockerproject.org/repo ubuntu-trusty main' state=present update_cache=true
+  become: yes
