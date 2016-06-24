@@ -1,6 +1,6 @@
 ---
 - name: install required packages
-  apt: name={{ with_items }} state=present update_cache=yes
+  apt: name={{ item }} state=present update_cache=yes
   with_items:
     - docker-engine
     - python-pip
