@@ -73,3 +73,6 @@ luigi-state.pickle
 
 # vagrant stuff
 .vagrant/
+
+# packer ignore
+vars.json
