@@ -1,0 +1,10 @@
+---
+- name: install required packages
+  apt: name={{ with_items }} state=present update_cache=yes
+  with_items:
+    - docker-engine
+    - python-pip
+    - linux-image-extra-{{ ansible_kernel }}
+
+- name: install docker py
+  pip: name=docker-py
