@@ -1,5 +1,6 @@
 ---
 - name: redis container
+  become: yes
   docker:
     name: redis_container
     image: redis
