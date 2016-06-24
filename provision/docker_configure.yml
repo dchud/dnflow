@@ -1,0 +1,9 @@
+---
+- name: redis container
+  docker:
+    name: redis_container
+    image: redis
+    command: redis-server --appendonly yes
+    state: started
+    expose:
+    - 6379
