@@ -136,3 +136,7 @@ next available RQ worker process, so if only one process is available,
 they will execute in succession, but with more than one worker running,
 multiple workflows can run in parallel.  The main limitation here
 is the rate limit on Twitter's API.
+
+## TO DO
+Add steps on how to run this on Vagrant
+Add steps on how to build this with packer to AWS
