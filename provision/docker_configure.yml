@@ -8,3 +8,12 @@
     state: started
     expose:
     - 6379
+
+- name: the dnflow container
+  become: yes
+  docker:
+    name: docnow_dnflow
+    image: docnow/docnflow
+    state: started
+    links:
+    - "redis_container:aliasedredis"
