@@ -1,0 +1,10 @@
+[docnow]
+192.168.60.14
+[redis]
+192.168.60.15
+[multi:children]
+docnow
+redis
+[multi:vars]
+ansible_ssh_user=vagrant
+ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
