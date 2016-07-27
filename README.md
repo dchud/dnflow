@@ -136,3 +136,29 @@ next available RQ worker process, so if only one process is available,
 they will execute in succession, but with more than one worker running,
 multiple workflows can run in parallel.  The main limitation here
 is the rate limit on Twitter's API.
+
+## Vagrant
+
+We have a Vagrantfile in here that can create a repeatable environment. Right now only the Virtualbox environment is supported. This is only tested on Ubuntu 14.04
+
+It will install a Python Virtual Environment and create a `docnow` user who will own the environment. In addition a second Virtual Machine with redis-server is installed. 
+
+You will need to copy your twitter auth credentials in the example_twarc_config in `provision/docnow/files/` before you run.
+
+```bash
+vagrant up
+```
+
+This will set up two virtual machines ready to use the dnflow.
+
+Log into your docnow vm and source your environment with:
+
+```bash
+vagrant ssh docnow
+source /etc/profile.d/docnow.sh
+```
+
+
+## TO DO
+Add steps on how to run this on Vagrant
+Add steps on how to build this with packer to AWS

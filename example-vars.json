@@ -1,0 +1,11 @@
+{
+    "aws_access_key": "",
+    "aws_secret_key" : "",
+    "aws_region" : "us-east-1",
+    "aws_instance_type": "m1.small",
+    "aws_source_ami": "ami-0870c460",
+    "aws_virtualization_type": "pv",
+
+    "automatic_os_security_updates": "false",
+    "automatic_os_reboot" : "false"
+}

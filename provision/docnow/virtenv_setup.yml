@@ -1,0 +1,23 @@
+---
+  - name: clone dnflow repository
+    become_user: docnow
+    git: repo=https://github.com/DocNow/dnflow.git dest=/home/docnow/dnflow
+
+  - name: install  virtualenv
+    pip: name=virtualenv
+
+  - name: copy new profile
+    copy: src=./docnow/files/docnow.sh dest=/etc/profile.d/docnow.sh mode="a+x"
+
+  - name: create virtualenv
+    become_user: docnow
+    pip: requirements=/home/docnow/dnflow/requirements.txt virtualenv=/opt/docnow virtualenv_python=python3.4
+
+  - name: source the profile
+    become_user: docnow
+    shell: source /etc/profile.d/docnow.sh
+    args:
+      executable: /bin/bash
+
+  - name: copy twarc config
+    copy: src=./docnow/files/example_twarc_config dest=/home/docnow/.twarc owner=docnow group=docnow

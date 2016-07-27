@@ -1,0 +1,12 @@
+---
+  - name: create group
+    group: name=docnow state=present
+
+  - name: create user
+    user: name=docnow shell=/bin/bash group=docnow groups=sudo append=yes
+
+  - name: add docnow user to sudoers
+    lineinfile: "dest=/etc/sudoers state=present regexp='^%sudo' line='%sudo ALL=(ALL) NOPASSWD: ALL'"
+
+  - name: create directory for virtualenv
+    file: path=/opt/docnow state=directory owner=docnow group=docnow

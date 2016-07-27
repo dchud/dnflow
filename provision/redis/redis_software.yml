@@ -1,0 +1,9 @@
+---
+  - name: install the properties software
+    apt: name=software-properties-common state=present
+
+  - name: add redis repository
+    apt_repository: repo='ppa:chris-lea/redis-server'
+
+  - name: install redis software
+    apt: name=redis-server state=present update_cache=yes
