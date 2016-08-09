@@ -1,0 +1,49 @@
+{
+    "variables": {
+        "aws_access_key": "{{ env `AWS_ACCESS_KEY` }}",
+        "aws_secret_key": "{{ env `AWS_SECRET_KEY` }}",
+        "aws_security_group_id": "{{ env `AWS_SECURITY_GROUP_ID` }}",
+        "aws_region": "{{ env `AWS_REGION` }}",
+        "aws_instance_type": "{{ env `AWS_INSTANCE_TYPE` }}",
+        "aws_source_ami": "{{ env `AWS_SOURCE_AMI` }}",
+        "aws_virtualization_type": "{{ env `AWS_VIRTUALIZATION_TYPE` }}"
+
+    },
+    "builders": [
+
+        {
+            "type": "amazon-ebs",
+            "access_key": "{{ user `aws_access_key` }}",
+            "secret_key": "{{ user `aws_secret_key` }}",
+
+            "security_group_id": "{{ user `aws_security_group_id` }}",
+            "region": "{{ user `aws_region` }}",
+
+            "source_ami": "{{ user `aws_source_ami` }}",
+            "instance_type": "{{ user `aws_instance_type` }}",
+            "ami_virtualization_type": "{{ user `aws_virtualization_type` }}",
+
+            "ssh_username": "ubuntu",
+            "tags": { "OS_Version": "Ubuntu", "Release": "Docnow {{ user `docnow_version` }}" },
+
+            "ami_name": "{{ user `packer_build_name` }} Docnow [{{ timestamp }}]",
+            "ami_description": "A Docnow Workflow built by packer"
+        }
+      ]
+    },
+      "provisioners":
+
+          {
+              "type": "shell",
+              "inline" : [
+                "sleep 30",
+                "sudo apt-add-repository ppa:rquillo/ansible",
+                "sudo /usr/bin/apt-get update",
+                "sudo /usr/bin/apt-get -y install ansible"
+              ]
+          },
+          {
+              "type": "ansible-local",
+              "playbook_file": "provision/provision.yml"
+          }
+}

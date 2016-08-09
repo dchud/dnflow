@@ -1,0 +1,30 @@
+---
+- name: install the rest of the software
+  apt: name={{ item }} state=present
+  with_items:
+    - git
+    - curl
+    - wget
+    - apt-transport-https
+    - gfortran
+    - libblas3gf
+    - libblas-dev
+    - liblapack3gf
+    - liblapack-dev
+    - libatlas-base-dev
+    - libxml2-dev
+    - libxslt1-dev
+    - libreadline6
+    - libreadline6-dev
+    - libjpeg8
+    - libjpeg8-dev
+    - libfreetype6
+    - libfreetype6-dev
+    - libffi-dev
+    - zlib1g-dev
+    - openssl
+    - libssl-dev
+    - pkg-config
+    - software-properties-common
+    - ca-certificates
+    

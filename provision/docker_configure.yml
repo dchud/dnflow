@@ -1,0 +1,19 @@
+---
+- name: redis container
+  become: yes
+  docker:
+    name: redis_container
+    image: redis
+    command: redis-server --appendonly yes
+    state: started
+    expose:
+    - 6379
+
+- name: the dnflow container
+  become: yes
+  docker:
+    name: docnow_dnflow
+    image: docnow/docnflow
+    state: started
+    links:
+    - "redis_container:aliasedredis"
