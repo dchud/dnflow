@@ -1,0 +1,10 @@
+HOSTNAME = 'localhost'
+DEBUG = True
+DATABASE = 'db.sqlite3'
+SECRET_KEY = 'a super secret key'
+STATIC_URL_PATH = '/static'
+DATA_DIR = 'data'
+MAX_TIMEOUT = 2 * 60 * 60  # two hours should be long enough
+REDIS = 'localhost'
+TWITTER_CONSUMER_KEY = 'YOUR_KEY_HERE'
+TWITTER_CONSUMER_SECRET = 'YOUR_SECRET_HERE'

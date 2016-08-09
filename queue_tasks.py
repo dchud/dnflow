@@ -1,8 +1,7 @@
 import subprocess
 
 
-def run_flow(text, job_id, count):
-    # python -m luigi --module summarize RunFlow --term trump
+def run_flow(text, job_id, count, token, secret):
     subprocess.run([
         'python',
         '-m',
@@ -15,5 +14,9 @@ def run_flow(text, job_id, count):
         '--jobid',
         str(job_id),
         '--count',
-        str(count)
+        str(count),
+        '--token',
+        str(token),
+        '--secret',
+        str(secret)
         ])

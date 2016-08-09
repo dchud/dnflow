@@ -5,6 +5,10 @@ var Search = React.createClass({
         <a href={"/summary/" + this.props.date_path}>
           {this.props.text}
         </a>
+        &nbsp;[
+        <a href={"https://twitter.com/" + this.props.twitter_user}>
+          {this.props.twitter_user}
+        </a>]
         &nbsp;({this.props.status})
       </div>
     );
@@ -19,7 +23,9 @@ var SearchList = React.createClass({
           key={search.id}
           id={search.id}
           date_path={search.date_path}
-          status={search.status}>
+          status={search.status}
+          twitter_user={search.twitter_user}>
+
         </Search>
       );
     });
@@ -83,7 +89,7 @@ var SearchBox = React.createClass({
   handleSearchSubmit: function(search) {
     $.ajax({
       // url: this.props.url,
-      url: '/new',
+      url: '/searches/',
       dataType: 'json',
       type: 'POST',
       data: search,
@@ -91,6 +97,7 @@ var SearchBox = React.createClass({
         this.setState({data: data});
       }.bind(this),
       error: function(xhr, status, err) {
+        this.setState({error: xhr.responseJSON.error});
         console.error(this.props.url, status, err.toString());
       }.bind(this)
     });
@@ -107,6 +114,7 @@ var SearchBox = React.createClass({
       <div className="searchBox">
         <h1>hi there</h1>
         <h2>search something new</h2>
+        <h3 style={{color: 'red'}}>{ this.state.error }</h3>
         <SearchForm onSearchSubmit={this.handleSearchSubmit} />
         <SearchList data={this.state.data} />
       </div>

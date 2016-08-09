@@ -18,6 +18,7 @@ import luigi
 from luigi.contrib import redis_store
 import networkx as nx
 from PIL import Image
+from flask.config import Config
 import requests
 
 import twarc
@@ -27,6 +28,9 @@ UI_URL = 'http://localhost:5000'
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 4  # arbitrary
+
+config = Config(os.path.dirname(__file__))
+config.from_pyfile('dnflow.cfg')
 
 logging.getLogger().setLevel(logging.WARN)
 logging.getLogger('').setLevel(logging.WARN)
@@ -41,10 +45,6 @@ def time_hash(digits=6):
     dt = '%s%02d%02d%02d%02d' % (t.tm_year, t.tm_mon, t.tm_mday,
                                  t.tm_hour, t.tm_min)
     return '%s-%s' % (dt, hash.hexdigest()[:digits])
-
-
-def localstrftime():
-    return time.strftime('%Y-%m-%dT%H%M', time.localtime())
 
 
 def url_filename(url, include_extension=True):
@@ -70,10 +70,10 @@ def generate_md5(fname, block_size=2**16):
 class EventfulTask(luigi.Task):
 
     @staticmethod
-    def update_job(date_path, jobid=None, status=None):
+    def update_job(date_path, job_id=None, status=None):
         data = {}
-        if jobid:
-            data['job_id'] = jobid
+        if job_id:
+            data['job_id'] = job_id
         if date_path:
             data['date_path'] = date_path
         if status:
@@ -86,14 +86,14 @@ class EventfulTask(luigi.Task):
     @luigi.Task.event_handler(luigi.Event.START)
     def start(task):
         print('### START ###: %s' % task)
-        EventfulTask.update_job(date_path=task.date_path,
+        EventfulTask.update_job(date_path=task.search['date_path'],
                                 status='START: %s' % task.task_family)
 
     @luigi.Task.event_handler(luigi.Event.SUCCESS)
     def success(task):
         print('### SUCCESS ###: %s' % task)
-        EventfulTask.update_job(date_path=task.date_path,
-                                status='START: %s' % task.task_family)
+        EventfulTask.update_job(date_path=task.search['date_path'],
+                                status='FINISHED: %s' % task.task_family)
 
     @luigi.Task.event_handler(luigi.Event.PROCESSING_TIME)
     def processing_time(task, processing_time):
@@ -102,54 +102,41 @@ class EventfulTask(luigi.Task):
     @luigi.Task.event_handler(luigi.Event.FAILURE)
     def failure(task, exc):
         print('### FAILURE ###: %s, %s' % (task, exc))
-        EventfulTask.update_job(date_path=task.date_path,
+        EventfulTask.update_job(date_path=task.search['date_path'],
                                 status='START: %s' % task.task_family)
 
 
-class Twarcy(object):
-
-    _c_key = os.environ.get('CONSUMER_KEY')
-    _c_secret = os.environ.get('CONSUMER_SECRET')
-    _a_token = os.environ.get('ACCESS_TOKEN')
-    _a_token_secret = os.environ.get('ACCESS_TOKEN_SECRET')
-    _twarc = twarc.Twarc(consumer_key=_c_key,
-                         consumer_secret=_c_secret,
-                         access_token=_a_token,
-                         access_token_secret=_a_token_secret)
-
-
-class FetchTweets(EventfulTask, Twarcy):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
-    lang = luigi.Parameter(default='en')
+class FetchTweets(EventfulTask):
+    search = luigi.DictParameter()
 
     def output(self):
-        fname = 'data/%s/tweets.json' % self.date_path
+        fname = 'data/%s/tweets.json' % self.search['date_path']
         return luigi.LocalTarget(fname)
 
     def run(self):
-        i = 0
-        tweets = []
-        for tweet in self._twarc.search(self.term, lang=self.lang):
-            i += 1
-            if i > self.count:
-                break
-            tweets.append(tweet)
-
-        with self.output().open('w') as fp_out:
-            for tweet in tweets:
-                fp_out.write(json.dumps(tweet) + '\n')
+        term = self.search['term']
+        lang = self.search['lang']
+        count = self.search['count']
+        t = twarc.Twarc(
+            consumer_key=config['TWITTER_CONSUMER_KEY'],
+            consumer_secret=config['TWITTER_CONSUMER_SECRET'],
+            access_token=self.search['token'],
+            access_token_secret=self.search['secret']
+        )
+        with self.output().open('w') as fh:
+            i = 0
+            for tweet in t.search(term, lang=lang):
+                i += 1
+                if i > count:
+                    break
+                fh.write(json.dumps(tweet) + '\n')
 
 
 class CountHashtags(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-hashtags.csv')
@@ -171,13 +158,10 @@ class CountHashtags(EventfulTask):
 
 
 class EdgelistHashtags(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'edgelist-hashtags.csv')
@@ -198,13 +182,10 @@ class EdgelistHashtags(EventfulTask):
 
 
 class CountUrls(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-urls.csv')
@@ -226,13 +207,10 @@ class CountUrls(EventfulTask):
 
 
 class CountDomains(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-domains.csv')
@@ -254,13 +232,10 @@ class CountDomains(EventfulTask):
 
 
 class CountMentions(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-mentions.csv')
@@ -283,13 +258,10 @@ class CountMentions(EventfulTask):
 
 
 class EdgelistMentions(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'edgelist-mentions.csv')
@@ -310,13 +282,10 @@ class EdgelistMentions(EventfulTask):
 
 
 class CountMedia(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-media.csv')
@@ -340,13 +309,10 @@ class CountMedia(EventfulTask):
 
 
 class FetchMedia(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return CountMedia(date_path=self.date_path, term=self.term,
-                          count=self.count)
+        return CountMedia(search=self.search)
 
     def output(self):
         # ensure only one successful fetch for each url
@@ -356,7 +322,7 @@ class FetchMedia(EventfulTask):
         return luigi.LocalTarget(fname)
 
     def run(self):
-        dirname = 'data/%s/media' % self.date_path
+        dirname = 'data/%s/media' % self.search['date_path']
         os.makedirs(dirname, exist_ok=True)
         # lots of hits to same server, so pool connections
         hashes = []
@@ -379,13 +345,10 @@ class FetchMedia(EventfulTask):
 
 
 class MatchMedia(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchMedia(date_path=self.date_path, term=self.term,
-                          count=self.count)
+        return FetchMedia(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('media-checksums-md5.txt',
@@ -393,13 +356,14 @@ class MatchMedia(EventfulTask):
         return luigi.LocalTarget(fname)
 
     def run(self):
-        files = sorted(os.listdir('data/%s/media' % self.date_path))
+        date_path = self.search['date_path']
+        files = sorted(os.listdir('data/%s/media' % date_path))
         hashes = {}
         matches = []
         g = nx.Graph()
         for i in range(len(files)):
             f = files[i]
-            fn = 'data/%s/media/%s' % (self.date_path, f)
+            fn = 'data/%s/media/%s' % (date_path, f)
             ahash = imagehash.average_hash(Image.open(fn))
             dhash = imagehash.dhash(Image.open(fn))
             phash = imagehash.phash(Image.open(fn))
@@ -426,23 +390,13 @@ class MatchMedia(EventfulTask):
             logging.debug(' - = - = - = GRAPH HERE - = - = - = -')
             logging.debug(d)
             json.dump(d, fp_graph, indent=2)
-        # with self.output().open('w') as fp:
-        #    writer = csv.writer(fp, delimiter=',',
-        #                        quoting=csv.QUOTE_MINIMAL)
-        #    writer.writerow(['file1', 'file2', 'ahash', 'dhash',
-        #                     'phash', 'sumhash'])
-        #    for match in matches:
-        #        writer.writerow(match)
 
 
 class CountFollowers(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'count-followers.csv')
@@ -466,13 +420,10 @@ class CountFollowers(EventfulTask):
 
 
 class FollowRatio(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'follow-ratio.csv')
@@ -499,15 +450,13 @@ class FollowRatio(EventfulTask):
 
 
 class SummaryHTML(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term)
+        return FetchTweets(search=self.search)
 
     def output(self):
-        fname = 'data/%s/summary.html' % self.date_path
+        fname = 'data/%s/summary.html' % self.search['date_path']
         return luigi.LocalTarget(fname)
 
     def run(self):
@@ -518,13 +467,10 @@ class SummaryHTML(EventfulTask):
 
 
 class SummaryJSON(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def requires(self):
-        return FetchTweets(date_path=self.date_path, term=self.term,
-                           count=self.count)
+        return FetchTweets(search=self.search)
 
     def output(self):
         fname = self.input().fn.replace('tweets.json', 'summary.json')
@@ -540,65 +486,62 @@ class SummaryJSON(EventfulTask):
                      for m in tweet['entities'].get('media', [])
                      if m['type'] == 'photo'])
         summary = {
-                'path': self.date_path,
+                'path': self.search['date_path'],
                 'date': time.strftime('%Y-%m-%d %H:%M:%S',
                                       time.localtime()),
                 'num_tweets': num_tweets,
-                'term': self.term
+                'term': self.search['term']
                 }
         with self.output().open('w') as fp_summary:
             json.dump(summary, fp_summary)
 
 
 class PopulateRedis(EventfulTask):
-    date_path = luigi.Parameter()
-    term = luigi.Parameter()
-    count = luigi.IntParameter()
+    search = luigi.DictParameter()
 
     def _get_target(self):
         return redis_store.RedisTarget(host=REDIS_HOST, port=REDIS_PORT,
                                        db=REDIS_DB,
-                                       update_id=self.date_path)
+                                       update_id=self.search['date_path'])
 
     def requires(self):
-        return MatchMedia(date_path=self.date_path, term=self.term,
-                          count=self.count)
+        return MatchMedia(search=self.search)
 
     def output(self):
         return self._get_target()
 
     def run(self):
+        date_path = self.search['date_path']
         r = redis_store.redis.StrictRedis(host='localhost')
         # Assume tweets.json exists, earlier dependencies require it
-        tweet_fname = 'data/%s/tweets.json' % self.date_path
+        tweet_fname = 'data/%s/tweets.json' % date_path
         for tweet_str in open(tweet_fname, 'r'):
             tweet = json.loads(tweet_str)
             pipe = r.pipeline()
             # baseline data
-            pipe.sadd('tweets:%s' % self.date_path, tweet['id'])
-            pipe.set('tweet:%s' % tweet['id'], tweet_str)
+            pipe.sadd('tweets:%s' % date_path, tweet['id'])
             for hashtag in [ht['text'].lower() for ht in
                             tweet['entities']['hashtags']]:
-                pipe.zincrby('count:hashtags:%s' % self.date_path,
+                pipe.zincrby('count:hashtags:%s' % date_path,
                              hashtag, 1)
-                pipe.sadd('hashtag:%s:%s' % (hashtag, self.date_path),
+                pipe.sadd('hashtag:%s:%s' % (hashtag, date_path),
                           tweet['id'])
             for mention in [m['screen_name'].lower() for m in
                             tweet['entities']['user_mentions']]:
-                pipe.zincrby('count:mentions:%s' % self.date_path,
+                pipe.zincrby('count:mentions:%s' % date_path,
                              mention, 1)
-                pipe.sadd('mention:%s:%s' % (mention, self.date_path),
+                pipe.sadd('mention:%s:%s' % (mention, date_path),
                           tweet['id'])
             for photo_url in [m['media_url']
                               for m in tweet['entities'].get('media', [])
                               if m['type'] == 'photo']:
                 photo_id = url_filename(photo_url, include_extension=False)
-                pipe.zincrby('count:photos:%s' % self.date_path, photo_id, 1)
-                pipe.sadd('photo:%s:%s' % (photo_id, self.date_path),
+                pipe.zincrby('count:photos:%s' % date_path, photo_id, 1)
+                pipe.sadd('photo:%s:%s' % (photo_id, date_path),
                           tweet['id'])
             pipe.execute()
 
-        photo_matches_fname = 'data/%s/media-graph.json' % self.date_path
+        photo_matches_fname = 'data/%s/media-graph.json' % date_path
         photo_matches = json.load(open(photo_matches_fname))
         if photo_matches:
             pipe = r.pipeline()
@@ -608,10 +551,10 @@ class PopulateRedis(EventfulTask):
                 # each id in the set needs a lookup key
                 for i in range(len(photo_match)):
                     photo_id = photo_ids[i]
-                    pipe.sadd('photomatch:%s:%s' % (photo_id, self.date_path),
+                    pipe.sadd('photomatch:%s:%s' % (photo_id, date_path),
                               *photo_ids)
             pipe.execute()
-        r.sadd('cacheproc', self.date_path)
+        r.sadd('cacheproc', date_path)
         target = self._get_target()
         target.touch()
 
@@ -625,34 +568,29 @@ class RunFlow(EventfulTask):
     jobid = luigi.IntParameter()
     term = luigi.Parameter()
     count = luigi.IntParameter(default=1000)
-    # lang = luigi.Parameter(default='en')
+    token = luigi.Parameter()
+    secret = luigi.Parameter()
 
     def requires(self):
-        EventfulTask.update_job(jobid=self.jobid, date_path=self.date_path)
-        yield CountHashtags(date_path=self.date_path, term=self.term,
-                            count=self.count)
-        yield CountHashtags(date_path=self.date_path, term=self.term,
-                            count=self.count)
-        # yield SummaryHTML(date_path=self.date_path, term=self.term)
-        yield SummaryJSON(date_path=self.date_path, term=self.term,
-                          count=self.count)
-        yield EdgelistHashtags(date_path=self.date_path, term=self.term,
-                               count=self.count)
-        yield CountUrls(date_path=self.date_path, term=self.term,
-                        count=self.count)
-        yield CountDomains(date_path=self.date_path, term=self.term,
-                           count=self.count)
-        yield CountMentions(date_path=self.date_path, term=self.term,
-                            count=self.count)
-        yield CountFollowers(date_path=self.date_path, term=self.term,
-                             count=self.count)
-        yield FollowRatio(date_path=self.date_path, term=self.term,
-                          count=self.count)
-        yield EdgelistMentions(date_path=self.date_path, term=self.term,
-                               count=self.count)
-        yield PopulateRedis(date_path=self.date_path, term=self.term,
-                            count=self.count)
-        yield MatchMedia(date_path=self.date_path, term=self.term,
-                         count=self.count)
-
-        EventfulTask.update_job(date_path=self.date_path, status='SUCCESS')
+        search = {
+            "date_path": self.date_path,
+            "job_id": self.jobid,
+            "term": self.term,
+            "count": self.count,
+            "token": self.token,
+            "secret": self.secret,
+            "lang": "en"
+        }
+        EventfulTask.update_job(job_id=search['job_id'], date_path=search['date_path'])
+        yield CountHashtags(search=search)
+        yield SummaryJSON(search=search)
+        yield EdgelistHashtags(search=search)
+        yield CountUrls(search=search)
+        yield CountDomains(search=search)
+        yield CountMentions(search=search)
+        yield CountFollowers(search=search)
+        yield FollowRatio(search=search)
+        yield EdgelistMentions(search=search)
+        yield PopulateRedis(search=search)
+        yield MatchMedia(search=search)
+        EventfulTask.update_job(date_path=search['date_path'], status='SUCCESS')

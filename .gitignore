@@ -70,9 +70,5 @@ data/
 luigi-state.pickle
 .DS_Store
 *.rdb
-
-# vagrant stuff
-.vagrant/
-
-# packer ignore
-vars.json
+node_modules/
+dnflow.cfg

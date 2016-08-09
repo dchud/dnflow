@@ -22,11 +22,46 @@
 .x.axis path {
     display: none;
 }
+
+.tipinfo {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    border-radius: 2px;
+}
+
+.tipinfo {
+    line-height: 1;
+    padding: 12px;
+    font: 13px sans-serif;
+    text-align: center;
+}
+
+/* Creates a small triangle extender for the tooltip */
+.tipinfo:after {
+    box-sizing: border-box;
+    display: inline;
+    font-size: 10px;
+    width: 100%;
+    line-height: 1;
+    color: rgba(0, 0, 0, 0.8);
+    content: "\25BC";
+    position: absolute;
+    text-align: center;
+}
+
+/* Style northward tooltips differently */
+.tipinfo.n:after {
+    margin: -1px 0 0 0;
+    top: 100%;
+    left: 0;
+}
 {% endblock style_css_extra %}
 
 {% block javascript_extra %}
+<script type="text/javascript"
+        src="https://rawgit.com/Caged/d3-tip/v0.6.7/index.js"></script>
 <script type="text/javascript">
-var summary;
+var date_path = window.location.pathname.split('/')[2];
 
 d3.json("summary.json", function(e, summary) {
     if (e) return console.warn(e);
@@ -34,6 +69,14 @@ d3.json("summary.json", function(e, summary) {
     var num_tweets = parseInt(summary.num_tweets);
     d3.select('#num_tweets').text(num_tweets.toLocaleString());
     d3.select('#date').text(summary.date);
+    // repeat for form field
+    var inputText = d3.select('#text');
+    inputText.property("value", summary.term);
+    // 1.2 is completely arbitrary :)
+    var newLength = summary.term.length * 1.2;
+    if (newLength > 50) { newLength = 50 };
+    inputText.property("size", newLength);
+    d3.select('#count').property("value", num_tweets.toLocaleString());
 });
 
 var margin = {t: 20, r: 30, b: 120, l: 70};
@@ -49,62 +92,34 @@ var y_axis = d3.svg.axis().scale(y).orient("left")
     .tickFormat(d3.format("d"));
 
 
-/* FIXME: this doesn't work.  Yields the following on console:
-before csv: hashtags
-before csv: mentions
-before csv: domains
-before csv: urls
-in csv: urls
-in csv: urls
-in csv: urls
-in csv: urls
-
-var csvfiles = [
-    ["count-hashtags.csv", "hashtags", "hashtag"],
-    ["count-mentions.csv", "mentions", "screen_name"],
-    ["count-domains.csv", "domains", "url"],
-    ["count-urls.csv", "urls", "url"]
-    ];
-
-for (i in csvfiles) {
-    var csvfile = csvfiles[i];
-    console.debug("before csv: " + csvfile[1]);
-    d3.csv(csvfile[0], function(e, data) {
-        if (e) return console.warn(e);
-        console.debug("in csv: " + csvfile[1]);
-        chart(csvfile[1], data, csvfile[2]);
-    });
-};
-*/
-
-d3.csv("count-hashtags.csv", function(e, data) {
+d3.json("/api/searches/" + date_path + "/hashtags/", function(e, data) {
     if (e) return console.warn(e);
-    chart("hashtags", data, "hashtag");
+    chart("hashtags", data, "hashtag", "#");
 });
 
-d3.csv("count-mentions.csv", function(e, data) {
+d3.json("/api/searches/" + date_path + "/mentions/", function(e, data) {
     if (e) return console.warn(e);
-    chart("mentions", data, "screen_name");
+    chart("mentions", data, "screen_name", "@");
 });
 
 d3.csv("count-domains.csv", function(e, data) {
     if (e) return console.warn(e);
-    chart("domains", data, "url");
+    chart("domains", data, "url", null);
 });
 
 d3.csv("count-urls.csv", function(e, data) {
     if (e) return console.warn(e);
-    chart("urls", data, "url");
+    chart("urls", data, "url", null);
 });
 
 d3.csv("count-followers.csv", function(e, data) {
     if (e) return console.warn(e);
-    chart("followers", data, "user");
+    chart("followers", data, "user", "from:");
 });
 
 d3.csv("follow-ratio.csv", function(e, data) {
     if (e) return console.warn(e);
-    chart("follow-ratio", data, "user");
+    chart("follow-ratio", data, "user", "from:");
 });
 
 var media_counts = {};
@@ -176,7 +191,7 @@ d3.json("media-graph.json", function(e, data) {
 });
 
 
-function chart(id, data, fieldname) {
+function chart(id, data, fieldname, searchPrefix) {
     data.sort(function(a, b) { return b.count - a.count; });
     data = data.slice(0, 25);
 
@@ -189,12 +204,41 @@ function chart(id, data, fieldname) {
       .append("g")
         .attr("transform", "translate(" + margin.l + "," + margin.t + ")");
 
+    var tipinfo = d3.tip()
+        .attr('class', 'tipinfo')
+        .offset([-10, 0])
+        .html(function(d) {
+            var tipText = d[fieldname] + ": " + d.count;
+            if (searchPrefix != null) {
+                tipText = tipText + "<br />" + "<br />" + "click to add";
+            }
+            return tipText;
+        });
+    svg.call(tipinfo);
+
     svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0," + height + ")")
         .call(x_axis)
         .selectAll("text")
             .style("text-anchor", "end")
+            .style("cursor", "pointer")
+            .on("click", function(d) {
+                var id = $(this).parents("div").attr("id");
+                var url = null;
+                var specs = null;
+                if (id == "hashtags") {
+                    url = "https://twitter.com/search?q=%23" + d;
+                } else if (id == "domains") {
+                    url = "http://" + d;
+                } else if (id == "urls") {
+                    url = "https://webrecorder.io/live/" + d;
+                } else {
+                    url = "https://twitter.com/intent/user?screen_name=" + d;
+                    specs = "location=no,height=570,width=520,scrollbars=no,status=yes";
+                }
+                window.open(url, "_blank", specs);
+            })
             .attr("dx", "-1em")
             .attr("dy", ".15em")
             .attr("transform", "rotate(-65)");
@@ -205,7 +249,27 @@ function chart(id, data, fieldname) {
 
     svg.selectAll(".bar")
         .data(data)
-      .enter().append("rect")
+      .enter().append("g")
+        .on('mouseover', tipinfo.show)
+        .on('mouseout', tipinfo.hide)
+        .on('click', function(d) {
+            if (searchPrefix != null) {
+                var inputText = d3.select('#text');
+                var oldValue = inputText.property("value");
+                var affixValue = searchPrefix + d[fieldname];
+                if (oldValue.indexOf(affixValue) == -1) {
+                    var newValue = oldValue + " " + searchPrefix + d[fieldname];
+                    inputText.property("value", oldValue + " " + affixValue);
+                    var newLength = inputText.property("value").length;
+                    if (newLength > 50) {
+                        newLength = 50
+                    } else {
+                        inputText.property("size", newLength * 1.2);
+                    }
+                }
+            }
+        })
+        .append("rect")
         .attr("class", "bar")
         .attr("x", function(d) { return x(d[fieldname]); })
         .attr("width", x.rangeBand())
@@ -218,10 +282,20 @@ function chart(id, data, fieldname) {
 {% block content %}
 <div class="row">
     <h2 class="item">
-        <span id='num_tweets'></span>
+        <span id="num_tweets"></span>
         tweets collected on
-        <span id='date'></span>
+        <span id="date"></span>
     </h2>
+</div>
+<div class="row">
+    <h3 class="item">Modify your search:</h3>
+</div>
+<div class="row">
+    <form class="item" action="/searches/" method="POST">
+        terms: <input id="text" type="text" name="text" />
+        count: <input id="count" type="text" name="count" value="1000" size="8"/>
+        <input type="submit" value="add" />
+    </form>
 </div>
 <div class="row">
     <div id="hashtags" class="item">
@@ -264,14 +338,14 @@ function chart(id, data, fieldname) {
         Download the raw data behind these charts.
         </p>
         <ul>
-            <li><a href='count-domains.csv'>count-domains.csv</a></li>
-            <li><a href='count-followers.csv'>count-followers.csv</a></li>
-            <li><a href='count-hashtags.csv'>count-hashtags.csv</a></li>
-            <li><a href='count-media.csv'>count-media.csv</a></li>
-            <li><a href='count-mentions.csv'>count-mentions.csv</a></li>
-            <li><a href='count-urls.csv'>count-urls.csv</a></li>
-            <li><a href='follow-ratio.csv'>follow-ratio.csv</a></li>
-            <li><a href='tweets.json'>tweets.json</a></li>
+            <li><a href="count-domains.csv">count-domains.csv</a></li>
+            <li><a href="count-followers.csv">count-followers.csv</a></li>
+            <li><a href="count-hashtags.csv">count-hashtags.csv</a></li>
+            <li><a href="count-media.csv">count-media.csv</a></li>
+            <li><a href="count-mentions.csv">count-mentions.csv</a></li>
+            <li><a href="count-urls.csv">count-urls.csv</a></li>
+            <li><a href="follow-ratio.csv">follow-ratio.csv</a></li>
+            <li><a href="tweets.json">tweets.json</a></li>
         </ul>
     </div>
 </div>

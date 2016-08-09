@@ -44,7 +44,17 @@
     <body>
         <div class='container'>
             <div class='row'>
-                <p class='item'><a href='/'>home</a></p>
+                <p class='item'>
+                  <a href='/'>home</a>
+                  &nbsp; | &nbsp;
+                  {% if twitter_user %}
+                  <a href='/logout'>logout</a>
+                  &nbsp; | &nbsp;
+                  <a href="https://twitter.com/{{ twitter_user }}">{{ twitter_user }}</a>
+                  {% else %}
+                  <a href='/login'>login</a>
+                  {% endif %}
+                </p>
             </div>
             <div class='row'>
                 <h1 class='item' id='title'>{{ title }}</h1>

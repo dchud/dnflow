@@ -8,6 +8,11 @@ Uses [Luigi](http://luigi.readthedocs.org/) for workflow automation.
 
 ## running it for yourself
 
+First create your dnflow configuration file, and add your Twitter application
+keys to it:
+
+    cp dnflow.cfg.template dnflow.cfg
+
 The current `summarize.py` is set up to collect a handful of tweets
 based on a search, then execute a series of counts against it.  This
 will result in one data file (the source tweets) and several count
