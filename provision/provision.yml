@@ -1,9 +1,0 @@
----
-- name: provision docker installation
-  hosts: all
-
-  tasks:
-
-  - include: docker_dependencies.yml
-  - include: docker_install.yml
-  - include: docker_configure.yml
